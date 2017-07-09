@@ -1,0 +1,143 @@
+﻿１．SDにOSを焼く
+	・公式サイトからOS（raspbian）をダウンロード
+	・DDwinをダウンロードして、管理者権限で実行
+		－microSD用のアダプタも用意する
+	
+２．ラズパイの初期設定
+	２．１．SDカードのパーティション拡張（Raspi3 or Jessieは不要？）
+		・「$ df -h」
+			－「/dev/mmcblk0p1」が出力されることを確認
+		・「$ sudo fdisk /dev/mmcblk0」
+			－以下、次のコマンドに従ってキーを打つ。
+				・「p」：パーティション情報表示。２番目のstartアドレスをメモる
+				・「d」：隠しパーティション削除
+				・「2」：２番目のパーティションを指定
+				・「p」：再度情報を表示して結果の確認
+				・「n」：新規パーティションを作成
+				・「p」：primaryを指定
+				・「2」：２番目のパーティションを指定
+				・「数字」：最初にメモしたstartアドレスを指定
+				・「」何も入力しない
+				・「w」：変更を書き込み
+		・「$ sudo reboot」
+			－再起動
+		・「$ sudo resize2fs /dev/mmcblk0p2」
+			－これでOK
+		・「$ df -h」
+			－拡張されたことを確認
+		
+	２．２．ネットワーク設定
+		・Raspi3なら、右上のマークをクリックして回線を選択
+		・右上のマークを右クリックして固定IPに（wlan0）
+			－「$ ifconfig」
+				・現在のIPを確認
+			－「IP Address」：確認したIP
+			－「Router」：133.20.164.254
+			－「DNS Server」：133.20.160.1
+			－「DNS Search」：なし
+		・それでも繋がらない！（apt-get updateでunreachable時など）
+			－「$ sudo route -n」
+				・「Gateway」が「0.0.0.0」のみの場合
+					－「$ sudo route add default gw 133.20.164.254」
+	
+	２．３．パッケージのインストール
+		・「$ sudo apt-get update」
+		・「$ sudo apt-get upgrade」
+		・「$ sudo apt-get install vim, apache2, 
+			  libopencv-dev, python-opencv, python-dev, sshpass」
+	
+	２．４．タイムゾーンなど
+		・「$ sudo raspi-config」
+			－タイムゾーンをTokyoにする
+	
+３．スクリプトの作成
+	３．１．USBカメラで撮影
+		・USBカメラを接続し、「$ lsusb」で接続を確認
+		・「import cv2
+			c = cv2.VideoCapture(0)
+			r, img = c.read()
+			cv2.imwrite('output.png', img)」で基本的にはOK
+		・ただ、カメラが撮影に失敗することがある
+			－そのときはimgにNoneが返るので、チェックしてループ
+				・スリープも入れないと再起し過ぎでエラー
+	
+	３．２．apacheと連動
+		・「$ sudo /etc/init.d/apache2 start」
+		・画像ファイルは「/var/www/html」に置く
+	
+	３．３．cronで自動化
+		・「$ sudo /etc/init.d/cron start」
+		・「$ crontab -e」	
+			－「*/2 * * * * sudo python /home/pi/capture.py」と書き保存
+			－動いてなさそうならログを活用
+				・「$ sudo vim /etc/rsyslog.conf」→「cron」の行をコメントイン
+				・「$ cat /var/log/cron」
+		・動かないと思ったら、以下を忘れてないかチェック
+			－スクリプトは絶対パス指定
+			－スクリプト内も絶対パス指定
+			－sudo権限で実行
+			－chmodもしておく
+	
+４．ラズパイ－公開サーバ間通信
+	４．１．ssh-agent
+		・「sudo apt-get install ssh-agent」
+		・「$ vim /home/pi/.bash_profile」
+			eval `ssh-agent`
+
+			# 秘密鍵ファイル
+			KEY_FILENAME='id_rsa'
+			# パスフレーズ
+			PASSPHRASE='XXXXXXXXXX'
+
+			expect -c "
+			set timeout -1
+			spawn ssh-add $HOME/.ssh/$KEY_FILENAME
+			expect {
+			    \"Enter passphrase for\" {
+			        send \"$PASSPHRASE\r\"
+			    }
+			}
+			expect {
+			    \"denied\" { exit 1 }
+			    eof { exit 0 }
+			}
+			"
+		・秘密鍵を「/home/pi/.ssh/」に置き、パーミッションを600に
+		・crontabとssh-agentを組み合わせるには、環境変数をcrontabに設定する
+			－「$ env | grep SSH_AUTH_SOCK」：ssh-Agentの情報を取得
+			－「$ crontab -e」「SSH_AUTH_SOCK=《上の結果》」
+			
+	４．２．scpで送信
+		・「$ scp /var/www/html/img.png iida@alpha.c.dendai.ac.jp:asagao」
+			
+５．ログデータの取り方
+	・cronで「history_recoder.py」を起動する
+	・「/var/www/html/tmp」内のファイルをalphaの「/home/iida/asagao/history」へ
+	・パーミッション設定に注意
+		－cronおよびssh-agentはpi
+		－/var/www/html内への保存はroot
+		－cronとpythonのsubprocessでパーミッションを切り替える
+			
+６．電源を入れ直したときにやること
+	５．１．ネットワーク設定
+		・何故かゲートウェイが保存されないので、routeコマンドで再登録
+		
+	５．２．crontabの環境変数を更新
+		・「SSH_AUTH_SOCK=」を確認して書き換える。
+		
+	５．３．crontabの実行を確認するには？
+		・「$ cat /var/log/cron.log」でcrontabの実行そのものを確認
+		・「$ cat /tmp/cron.log」で実行したコードのエラーを確認
+		
+	５．４．SSHクライアントを立ち上げてシェルに入る
+		・raspiから直にやろうとするとエラー
+			－.bash_profileが読み込まれてなさそう？
+
+参照：
+http://qiita.com/abpla/items/52e18c393d4cf2875384
+http://yachibit.hatenablog.jp/entry/2013/04/25/001912
+https://gist.github.com/koudaiii/49ac3f8b7c207f0da31f
+http://d.hatena.ne.jp/natsumesouxx/20100313/1268479064
+http://d.hatena.ne.jp/yuyarin/20100225/1267084795
+http://webos-goodies.jp/archives/50672669.html
+
