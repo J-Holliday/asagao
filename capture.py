@@ -45,3 +45,5 @@ if __name__ == '__main__':
     img.save(OUTPUT_DIR + OUTPUT_FILE)
     img.save(OUTPUT_DIR + 'tmp/img{}.png'.format(
         datetime.now().strftime('%Y%m%d%H%M%S')))
+    print('capture.py is executed at {}'.format(
+        datetime.now().strftime('%Y/%m/%d - %H:%M:%S')))

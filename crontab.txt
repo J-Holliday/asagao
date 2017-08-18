@@ -1,0 +1,6 @@
+SSH_AUTH_SOCK=/tmp/ssh-rFn7PiKCIfUo/agent.21357
+*/2 * * * * sudo python /home/pi/ascetic/asagao/capture.py >>/tmp/cron/capture.log 2>>/tmp/cron/capture.err
+*/2 * * * * scp /var/www/html/img.png iida@alpha.c.dendai.ac.jp:asagao >>/tmp/cron/scp.log 2>>/tmp/cron/scp.err
+*/2 * * * * python /home/pi/ascetic/asagao/history_recoder.py >>/tmp/cron/history_recoder.log 2>>/tmp/cron/history_recoder.err
+*/2 * * * * sudo python /home/pi/ascetic/BME280/Python27/temperature_logger.py >>/tmp/cron/temperature.log 2>>/tmp/cron/temperature.err
+*/2 * * * * python /home/pi/ascetic/BME280/Python27/history_recoder.py >>/tmp/cron/history_recoder.log 2>>/tmp/cron/history_recoder.err
